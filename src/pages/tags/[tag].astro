@@ -1,0 +1,51 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('blog', ({ data }) => !data.draft);
+  const tags = new Set<string>();
+  posts.forEach((p) => p.data.tags.forEach((t) => tags.add(t)));
+  return [...tags].map((tag) => ({
+    params: { tag },
+    props: {
+      posts: posts
+        .filter((p) => p.data.tags.includes(tag))
+        .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf()),
+    },
+  }));
+}
+
+const { tag } = Astro.params;
+const { posts } = Astro.props;
+
+const fmt = (d: Date) =>
+  d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+---
+<BaseLayout title={`#${tag} · divyansh.dev`}>
+  <p class="back"><a href="/tags">&larr; All tags</a></p>
+  <h1>Posts tagged <span class="accent">#{tag}</span></h1>
+
+  <ul class="post-list">
+    {posts.map((post) => (
+      <li class="card post-card">
+        <a href={`/${post.id}`}>
+          <time datetime={post.data.date.toISOString()}>{fmt(post.data.date)}</time>
+          <h2>{post.data.title}</h2>
+          <p>{post.data.description}</p>
+        </a>
+      </li>
+    ))}
+  </ul>
+
+  <style>
+    .back { margin-bottom: 1rem; }
+    .back a { color: var(--text-dim); font-size: 0.9rem; }
+    h1 { font-size: 1.6rem; margin: 0 0 1.5rem; }
+    .accent { color: var(--accent); }
+    .post-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; }
+    .post-card time { color: var(--text-dim); font-size: 0.8rem; }
+    .post-card h2 { margin: 0.3rem 0 0.4rem; font-size: 1.15rem; }
+    .post-card p { margin: 0; color: var(--text-dim); font-size: 0.93rem; }
+  </style>
+</BaseLayout>
