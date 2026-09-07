@@ -39,6 +39,7 @@ body {
   color: var(--text);
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   line-height: 1.65;
+  font-size: 1.21rem;
   transition: background 0.25s ease, color 0.25s ease;
 }
 
@@ -137,4 +138,79 @@ hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
 @media (prefers-reduced-motion: reduce) {
   .ps-glow { animation: none; }
   .card { transition: none; }
+}
+
+/* ---------- Fix Shiki dual-theme switching ----------
+   Shiki bakes both light/dark colors into each token as CSS vars and
+   only swaps on `prefers-color-scheme` by default. Since we toggle
+   dark mode manually via [data-theme], force the swap ourselves. */
+:root[data-theme="dark"] pre.astro-code,
+:root[data-theme="dark"] pre.astro-code span {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg) !important;
+  font-style: var(--shiki-dark-font-style) !important;
+  font-weight: var(--shiki-dark-font-weight) !important;
+  text-decoration: var(--shiki-dark-text-decoration) !important;
+}
+
+/* ---------- Quicksand: scoped to blog post content only ---------- */
+@font-face {
+  font-family: "Quicksand";
+  src: url("../assets/fonts/Quicksand-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Quicksand";
+  src: url("../assets/fonts/Quicksand-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Quicksand";
+  src: url("../assets/fonts/Quicksand-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Quicksand";
+  src: url("../assets/fonts/Quicksand-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Applied only inside blog post body — not the header/nav/footer,
+   which keep the default site font (Inter). See PostLayout.astro. */
+.blog-font {
+  font-family: "Quicksand", system-ui, sans-serif;
+}
+
+/* ---------- Permanent blurple link highlight (post body links) ---------- */
+.prose a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 0.15s ease;
+}
+.prose a:hover {
+  text-decoration-color: var(--accent);
+}
+
+/* ---------- Neon yellow text highlight, e.g. <mark>important</mark> ---------- */
+.prose mark {
+  background: #e6ff2b;
+  color: #111;
+  padding: 0.05em 0.3em;
+  border-radius: 3px;
+  box-shadow: 0 0 12px rgba(230, 255, 43, 0.5);
+}
+:root[data-theme="dark"] .prose mark {
+  background: #d4ff00;
+  box-shadow: 0 0 14px rgba(212, 255, 0, 0.4);
 }

@@ -1,6 +1,7 @@
 ---
 title: "But What are Spatial Databases ?"
 description: "Ever thought how Uber finds cabs near you or how Google Maps suggests restaurants within 2 kilometre radius of your location?"
+cover: "../../assets/images/blog/spatial-databases/mbr-polygon.png"
 date: 2025-10-07
 tags: ["Spatial Computing", "Database", "GIS"]
 ---
@@ -91,8 +92,8 @@ Take R-trees, for example. While they are powerful for dynamic and multi-shape g
 
 This is where modern indexing libraries like Uber’s H3 and Google’s S2 come in. Both take a “divide the earth into cells” approach, but do so in a way that is globally accurate and ready for the cloud:
 
-* H3 (Uber): Uses hexagonal hierarchies, giving cells with consistent neighbor relationships. Perfect for heatmaps, coverage, and fast range queries at internet scale.
-* S2 (Google): Maps the earth onto a cube (and then a sphere), recursively subdividing it into “spherical quads.” Optimized for keeping cell sizes consistent worldwide and for hierarchical queries over vast datasets.
+* <mark>H3 (Uber)</mark>: Uses hexagonal hierarchies, giving cells with consistent neighbor relationships. Perfect for heatmaps, coverage, and fast range queries at internet scale.
+* <mark>S2 (Google)</mark>: Maps the earth onto a cube (and then a sphere), recursively subdividing it into “spherical quads.” Optimized for keeping cell sizes consistent worldwide and for hierarchical queries over vast datasets.
 
 Also note that these libraries take into account the spherical nature of earth. A simple grid structure like quadtree generates distorted cells as we move towards the poles. These libraries are more useful for point data. These libraries are available as extensions to popular databases like Postgres, MongoDB, CockroachDB, etc,.
 

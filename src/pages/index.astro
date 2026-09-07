@@ -1,52 +1,166 @@
 ---
 import { getCollection } from 'astro:content';
-import BaseLayout from "../layouts/BaseLayout.astro"
+import BaseLayout from '../layouts/BaseLayout.astro';
 
-const posts = await getCollection('blog', ({ data }) => !data.draft);
-const tagCounts = new Map<string, number>();
-for (const post of posts) {
-  for (const tag of post.data.tags) {
-    tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
-  }
-}
-const tags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]);
+const allPosts = await getCollection('blog', ({ data }) => !data.draft);
+const posts = allPosts.sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf());
+
+const fmt = (d: Date) =>
+  d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+
+// Serialize a light index for the client-side search script
+const searchIndex = posts.map((p) => ({
+  slug: p.id,
+  title: p.data.title,
+  description: p.data.description,
+  tags: p.data.tags,
+  date: p.data.date.toISOString(),
+}));
 ---
-<BaseLayout title="Tags · divyansh.dev">
-  <h1>Browse by tag</h1>
-  <ul class="tag-grid">
-    {tags.map(([tag, count]) => (
-      <li>
-        <a class="tag-card card" href={`/tags/${tag}`}>
-          <span class="tag-name">#{tag}</span>
-          <span class="tag-count">{count}</span>
+<BaseLayout title="divyansh.dev · Blog">
+  <section class="hero">
+    <div class="ps-glow"></div>
+    <h1>Writing on backend, systems &amp; first principles</h1>
+    <p class="hero-sub">Notes and deep dives, built one concept at a time.</p>
+
+    <div class="search-wrap">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"></circle>
+        <path d="m21 21-4.35-4.35"></path>
+      </svg>
+      <input id="search-input" type="text" placeholder="Search posts or tags…" autocomplete="off" />
+    </div>
+  </section>
+
+  <ul id="post-list" class="post-list">
+    {posts.map((post) => (
+      <li class="card post-card" data-title={post.data.title.toLowerCase()} data-tags={post.data.tags.join(',').toLowerCase()}>
+        <a href={`/${post.id}`}>
+          {post.data.cover && (
+            <div class="post-card-img">
+              <img src={post.data.cover} alt="" loading="lazy" />
+            </div>
+          )}
+          <div class="post-card-body">
+            <div class="post-card-top">
+              <time datetime={post.data.date.toISOString()}>{fmt(post.data.date)}</time>
+            </div>
+            <h2>{post.data.title}</h2>
+            <p>{post.data.description}</p>
+            <div class="post-tags">
+              {post.data.tags.map((t) => <span class="tag">{t}</span>)}
+            </div>
+          </div>
         </a>
       </li>
     ))}
   </ul>
 
+  <p id="no-results" class="no-results" hidden>No posts match your search.</p>
+
   <style>
-    h1 { font-size: 1.6rem; margin-bottom: 1.5rem; }
-    .tag-grid {
-      list-style: none;
-      margin: 0;
-      padding: 0;
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-      gap: 0.75rem;
+    .hero {
+      position: relative;
+      padding: 3rem 0 2rem;
+      overflow: hidden;
+      isolation: isolate;
     }
-    .tag-card {
+    .hero h1 { font-size: 2.1rem; line-height: 1.25; margin: 0 0 0.6rem; max-width: 20ch; }
+    .hero-sub { color: var(--text-dim); margin: 0 0 1.75rem; }
+
+    .search-wrap {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      font-weight: 600;
-    }
-    .tag-count {
-      background: var(--bg);
+      gap: 0.6rem;
       border: 1px solid var(--border);
-      border-radius: 999px;
-      font-size: 0.75rem;
-      padding: 0.1rem 0.5rem;
+      background: var(--bg-soft);
+      border-radius: 10px;
+      padding: 0.6rem 0.9rem;
+      max-width: 420px;
       color: var(--text-dim);
+      transition: border-color 0.2s ease;
     }
+    .search-wrap:focus-within { border-color: var(--accent); }
+    .search-wrap input {
+      border: none;
+      outline: none;
+      background: transparent;
+      color: var(--text);
+      font-size: 0.95rem;
+      width: 100%;
+    }
+
+    .post-list {
+      list-style: none;
+      margin: 1.5rem 0 0;
+      padding: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1.25rem;
+    }
+    .post-card { padding: 0; overflow: hidden; }
+    .post-card a { display: block; height: 100%; }
+    .post-card-img {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      overflow: hidden;
+      background: var(--bg);
+    }
+    .post-card-img img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.3s ease;
+    }
+    .post-card:hover .post-card-img img { transform: scale(1.04); }
+    .post-card-body { padding: 1.1rem 1.25rem 1.25rem; }
+    .post-card-top { color: var(--text-dim); font-size: 0.75rem; margin-bottom: 0.4rem; }
+    .post-card h2 { margin: 0 0 0.35rem; font-size: 1.05rem; line-height: 1.35; }
+    .post-card p {
+      margin: 0 0 0.7rem;
+      color: var(--text-dim);
+      font-size: 0.82rem;
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .post-tags { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+    .no-results { color: var(--text-dim); text-align: center; margin-top: 3rem; }
   </style>
+
+  <script type="application/json" id="search-data" set:html={JSON.stringify(searchIndex)} />
+  <script>
+    const data = JSON.parse(document.getElementById('search-data')!.textContent!);
+    const input = document.getElementById('search-input') as HTMLInputElement;
+    const list = document.getElementById('post-list') as HTMLUListElement;
+    const noResults = document.getElementById('no-results') as HTMLElement;
+    const items = Array.from(list.children) as HTMLElement[];
+
+    function applyFilter(query: string) {
+      const q = query.trim().toLowerCase();
+      let visible = 0;
+      items.forEach((el) => {
+        const title = el.dataset.title || '';
+        const tags = el.dataset.tags || '';
+        const match = !q || title.includes(q) || tags.includes(q);
+        el.hidden = !match;
+        if (match) visible++;
+      });
+      noResults.hidden = visible !== 0;
+    }
+
+    // Support ?tag=xxx or ?q=xxx from URL (used by /tags pages and shareable links)
+    const params = new URLSearchParams(location.search);
+    const initial = params.get('q') || params.get('tag') || '';
+    if (initial) {
+      input.value = initial;
+      applyFilter(initial);
+    }
+
+    input.addEventListener('input', () => applyFilter(input.value));
+  </script>
 </BaseLayout>
