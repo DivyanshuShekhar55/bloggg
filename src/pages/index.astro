@@ -35,25 +35,27 @@ const searchIndex = posts.map((p) => ({
     </div>
   </section>
 
+  
+
   <ul id="post-list" class="post-list">
-    {posts.map((post) => (
-      <li class="card post-card" data-title={post.data.title.toLowerCase()} data-tags={post.data.tags.join(',').toLowerCase()}>
-        <a href={`/${post.id}`}>
-          {post.data.cover && (
-            <div class="post-card-img">
-              <Image src={post.data.cover} alt="" width={520} height={293} loading="lazy" />
+      {posts.map((post) => (
+        <li class="card post-card" data-title={post.data.title.toLowerCase()} data-tags={post.data.tags.join(',').toLowerCase()}>
+          <a href={`/${post.id}`}>
+            {post.data.cover && (
+              <div class="post-card-img">
+                <Image src={post.data.cover} alt="" width={520} height={293} loading="lazy" />
+              </div>
+            )}
+            <div class="post-card-body">
+              <div class="post-card-top">
+                <time datetime={post.data.date.toISOString()}>{fmt(post.data.date)}</time>
+              </div>
+              <h2>{post.data.title}</h2>
+              <p>{post.data.description}</p>
             </div>
-          )}
-          <div class="post-card-body">
-            <div class="post-card-top">
-              <time datetime={post.data.date.toISOString()}>{fmt(post.data.date)}</time>
-            </div>
-            <h2>{post.data.title}</h2>
-            <p>{post.data.description}</p>
-          </div>
-        </a>
-      </li>
-    ))}
+          </a>
+        </li>
+      ))}
   </ul>
 
   <p id="no-results" class="no-results" hidden>No posts match your search.</p>
@@ -109,8 +111,11 @@ const searchIndex = posts.map((p) => ({
       margin: 1.5rem 0 0;
       padding: 0;
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      grid-template-columns: repeat(2, 1fr);
       gap: 1.25rem;
+    }
+    @media (max-width: 560px) {
+      .post-list { grid-template-columns: 1fr; }
     }
     .post-card { padding: 0; overflow: hidden; }
     .post-card a { display: block; height: 100%; }
