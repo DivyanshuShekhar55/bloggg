@@ -1,5 +1,6 @@
 ---
 import { getCollection } from 'astro:content';
+import { Image } from 'astro:assets';
 import BaseLayout from '../layouts/BaseLayout.astro';
 
 const allPosts = await getCollection('blog', ({ data }) => !data.draft);
@@ -24,7 +25,7 @@ const searchIndex = posts.map((p) => ({
     <p class="hero-sub">Notes and deep dives, built one concept at a time.</p>
 
     <div class="search-wrap">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="8"></circle>
         <path d="m21 21-4.35-4.35"></path>
       </svg>
@@ -38,7 +39,7 @@ const searchIndex = posts.map((p) => ({
         <a href={`/${post.id}`}>
           {post.data.cover && (
             <div class="post-card-img">
-              <img src={post.data.cover} alt="" loading="lazy" />
+              <Image src={post.data.cover} alt="" width={520} height={293} loading="lazy" />
             </div>
           )}
           <div class="post-card-body">
@@ -47,9 +48,6 @@ const searchIndex = posts.map((p) => ({
             </div>
             <h2>{post.data.title}</h2>
             <p>{post.data.description}</p>
-            <div class="post-tags">
-              {post.data.tags.map((t) => <span class="tag">{t}</span>)}
-            </div>
           </div>
         </a>
       </li>
@@ -71,16 +69,21 @@ const searchIndex = posts.map((p) => ({
     .search-wrap {
       display: flex;
       align-items: center;
-      gap: 0.6rem;
+      gap: 0.7rem;
       border: 1px solid var(--border);
       background: var(--bg-soft);
-      border-radius: 10px;
-      padding: 0.6rem 0.9rem;
-      max-width: 420px;
+      border-radius: 999px;
+      padding: 0.7rem 1.1rem;
+      max-width: 440px;
       color: var(--text-dim);
-      transition: border-color 0.2s ease;
+      box-shadow: var(--shadow);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
-    .search-wrap:focus-within { border-color: var(--accent); }
+    .search-wrap svg { flex-shrink: 0; opacity: 0.7; }
+    .search-wrap:focus-within {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+    }
     .search-wrap input {
       border: none;
       outline: none;
@@ -89,6 +92,7 @@ const searchIndex = posts.map((p) => ({
       font-size: 0.95rem;
       width: 100%;
     }
+    .search-wrap input::placeholder { color: var(--text-dim); }
 
     .post-list {
       list-style: none;
@@ -106,19 +110,19 @@ const searchIndex = posts.map((p) => ({
       overflow: hidden;
       background: var(--bg);
     }
-    .post-card-img img {
+    .post-card-img :global(img) {
       width: 100%;
       height: 100%;
       object-fit: cover;
       display: block;
       transition: transform 0.3s ease;
     }
-    .post-card:hover .post-card-img img { transform: scale(1.04); }
+    .post-card:hover .post-card-img :global(img) { transform: scale(1.04); }
     .post-card-body { padding: 1.1rem 1.25rem 1.25rem; }
     .post-card-top { color: var(--text-dim); font-size: 0.75rem; margin-bottom: 0.4rem; }
     .post-card h2 { margin: 0 0 0.35rem; font-size: 1.05rem; line-height: 1.35; }
     .post-card p {
-      margin: 0 0 0.7rem;
+      margin: 0;
       color: var(--text-dim);
       font-size: 0.82rem;
       line-height: 1.5;
@@ -127,7 +131,6 @@ const searchIndex = posts.map((p) => ({
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
-    .post-tags { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 
     .no-results { color: var(--text-dim); text-align: center; margin-top: 3rem; }
   </style>

@@ -27,7 +27,7 @@ const { title, description = "A personal blog on backend, systems, and first pri
   </head>
   <body>
     <header class="site-header">
-      <div class="container header-inner">
+      <div class="header-inner">
         <a href="/" class="brand">divyansh<span>.dev</span></a>
         <nav class="nav">
           <a href="/">Blog</a>
@@ -60,7 +60,9 @@ const { title, description = "A personal blog on backend, systems, and first pri
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0.9rem 1.25rem;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0.9rem 1.5rem;
       }
       .brand { font-weight: 700; font-size: 1.05rem; }
       .brand span { color: var(--accent); }
