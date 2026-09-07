@@ -1,0 +1,499 @@
+---
+title: "Everything About Your Postgres Server Monitoring Pt.I"
+cover: "../../assets/images/blog/postgres-monitoring-part-1/img1.png"
+description: "Measure what matters with postgres"
+date: 2025-10-07
+tags: ["Postgres", "Database", "Observability"]
+---
+
+![](../../assets/images/blog/postgres-monitoring-part-1/img1.png)
+
+What gets measured is what gets improved.
+
+This holds for humans and holds even better for machines. And your Postgres server could be the single most important part of your system. So how do we actually measure how good our database is doing? How do we know if it is healthy, if it is struggling, or if something that looks scary is actually completely normal?
+
+This blog will answer that for you.
+
+Its going to be a long one, so take your time!
+
+We are going to go from the basics of how Postgres statistics work, all the way to connections, wait events, WAL, checkpoints, archiving, tables, indexes, I/O, buffers, background writers, and finally replication.
+
+And I don’t just want to explain what each metric means. The more important question is what that metric actually tells you when you are debugging a real database.
+
+## Before Everything Else — How Does Postgres Statistics Actually Work?
+
+The numbers you see in Postgres statistics views are not all the same kind of numbers. Some of them are meant to tell you what is happening right now, while others are cumulative counters that keep increasing as the database does more work.
+
+### The Two Kinds Of Statistics Views
+
+The first type is what we can think of as **dynamic statistics**. These are meant to tell you what is happening right now. `pg_stat_activity` is probably the most important example, along with the `pg_stat_progress_*` views. If you are debugging something that is currently stuck, running for too long, or behaving strangely, these are the kinds of views you want to look at.
+
+The second type is **collected or cumulative statistics**. These are counters that build up over time, usually since the last statistics reset. Views such as `pg_stat_database`, `pg_stat_bgwriter`, and `pg_stat_all_tables` fall into this category.
+
+So the simple rule of thumb is: if something is stuck **right now**, dynamic views are usually what you want. If you are trying to understand trends, bloat, cache effectiveness, or workload behaviour over time, cumulative statistics are much more useful.
+
+But there is another thing we need to understand before trusting these numbers blindly.
+
+### The Numbers Aren’t Always Instant
+
+Postgres does not necessarily update every statistics counter immediately.
+
+Each process waits until it is about to become idle before pushing its statistics into shared memory, and it will not do that more than once per second. So if a query is still running, some of the statistics associated with that activity may not have been flushed yet.
+
+This is one reason why statistics can sometimes look slightly behind reality.
+
+There is an important exception here though. The information in `pg_stat_activity` about the query that is currently running is always live because that information is collected differently through `track_activities`.
+
+So if you are looking at `pg_stat_activity` to answer "what query is running right now?", that particular information is not subject to the same delay.
+
+### Statistics Can Also Freeze Inside A Transaction
+
+This is another little detail that can be confusing when you first start working with Postgres monitoring.
+
+Once you look at statistics inside a transaction, Postgres can keep showing you the same statistics snapshot for the rest of that transaction. The numbers can actually change in the database underneath you, but your transaction can continue seeing the same snapshot.
+
+This is intentional because it keeps your statistics queries internally consistent. But it can be confusing if you run a statistics query, let some database activity happen, and then run the same query again inside the same transaction and get exactly the same numbers.
+
+You might think Postgres isn’t updating the statistics.
+
+It is. You are just still looking at the same snapshot.
+
+If you want to avoid this, the simplest option is to not wrap these monitoring checks inside an explicit transaction. You can also force a refresh using:
+
+```
+SELECT pg_stat_clear_snapshot();
+```
+
+There are also two related settings worth knowing about. `stats_fetch_consistency = snapshot` gives you a fully consistent snapshot, although it uses more memory, while `stats_fetch_consistency = none` disables this caching behaviour and can be useful for one-off checks.
+
+### What If I Want To See My Own Uncommitted Activity?
+
+There is actually another set of statistics views for this.
+
+If you want to see what the current transaction itself has done, including activity that hasn’t been flushed into the normal statistics yet, you can use the transaction-level views:
+
+- `pg_stat_xact_all_tables`
+- `pg_stat_xact_sys_tables`
+- `pg_stat_xact_user_table`
+- `pg_stat_xact_user_functions`
+
+These update continuously for the current transaction and are useful when you specifically want to inspect your own uncommitted activity.
+
+### Permissions Matter Too
+
+There is one more thing that can make monitoring confusing: permissions.
+
+An ordinary Postgres user can see the full information for its own sessions, but when looking at other sessions, many columns can come back as `NULL`. The session itself is still visible, but some of the information about it is hidden.
+
+Superusers and members of `pg_read_all_stats` can see everything.
+
+This is worth remembering if you are building something like a monitoring system or a connection pooler that connects to Postgres using a non-superuser role. You might query `pg_stat_activity` and wonder why certain columns are empty. The problem may not be with Postgres at all. Your monitoring user may simply not have permission to see that information.
+
+## Resetting Statistics — What Does It Actually Do?
+
+Now let’s talk about resetting statistics.
+
+There are situations where having a clean baseline is useful. Imagine you change a configuration setting, maybe increase `shared_buffers`, retune autovacuum, or change some other database setting. If you keep the old accumulated counters, comparing the numbers before and after the change can become messy.
+
+Resetting the statistics gives you a clean starting point.
+
+But there is one very important thing to understand.
+
+**Resetting statistics is not a rebuild.**
+
+Postgres does not recalculate anything when you reset statistics. It doesn’t scan your tables and it doesn’t rebuild anything. It simply zeroes the monitoring counters.
+
+If `idx_blks_read` was sitting at `50,000`, after a reset it becomes `0` and starts counting new activity from there. The old number is gone. It isn't archived somewhere and it isn't subtracted later.
+
+The reset itself is also extremely cheap. It is essentially just zeroing counters in shared memory, so there is no table scan, no meaningful disk I/O, and no significant lock contention involved.
+
+## Monitoring Statistics Are Not Planner Statistics
+
+This distinction is important because the word “statistics” makes these things sound related when they actually serve different purposes.
+
+Resetting `pg_stat_*` and `pg_statio_*` only affects monitoring and activity counters. It does **not** reset `pg_stats` or `pg_statistic`, which contain the planner statistics generated by `ANALYZE`.
+
+Refreshing planner statistics is a separate operation, and unlike resetting monitoring counters, `ANALYZE` isn't free because it actually scans the table to collect information for the query planner.
+
+## The Different Statistics Reset Functions
+
+Postgres gives us a few different reset functions depending on how much you want to clear.
+
+`pg_stat_reset()` resets all statistics for the current database, including table, index, and function statistics.
+
+`pg_stat_reset_shared(target)` handles cluster-wide shared statistics. The targets include `archiver`, `bgwriter`, `checkpointer`, `io`, `recovery_prefetch`, `wal`, and `all`.
+
+If you only care about a specific object, there are more targeted options. `pg_stat_reset_single_table_counters(oid)` resets the counters for one table, while `pg_stat_reset_single_function_counters(oid)` does the same thing for one function. There are also `pg_stat_reset_slru(name)` for SLRU statistics, `pg_stat_reset_replication_slot(name)` for one replication slot, and `pg_stat_reset_subscription_stats(oid)` for subscription error and conflict statistics.
+
+## Should You Actually Reset Statistics In Production?
+
+Usually, not really.
+
+And the reason is simple: Postgres statistics are not your historical monitoring database. They are a live/cumulative view of what has happened since the last reset.
+
+If Postgres restarts uncleanly or you manually reset the counters, that history is gone.
+
+So if you actually want to understand how your database behaves over time, manually resetting counters is not the solution.
+
+You should collect them somewhere else.
+
+## The Right Way To Monitor Postgres
+
+In a real monitoring setup, an agent periodically scrapes the Postgres statistics views, usually every 10–60 seconds, and sends those values to a time-series database.
+
+A very common open-source combination is **Prometheus + postgres\_exporter**, with Grafana used for visualization. There are also managed tools such as Datadog and New Relic, and Postgres-specific tools such as pganalyze that go deeper into query-level analysis.
+
+But here is the important part.
+
+Most of these statistics are cumulative counters.
+
+Suppose Postgres tells you that it has performed `500,000` reads.
+
+That number doesn’t tell you very much on its own.
+
+Your monitoring system can scrape it now and then scrape it again 30 seconds later. If the value went from `499,500` to `500,000`, then you know that 500 reads happened in those 30 seconds.
+
+That is a rate.
+
+And that rate is what you actually want to graph.
+
+So instead of graphing the raw ever-growing counter, monitoring systems calculate the difference between two scrapes and turn it into something like reads per second.
+
+This is also why you almost never need to manually reset statistics in a properly monitored production system. Your monitoring system is already calculating deltas regardless of how large the raw counters become. Manual resets are mostly useful for quick tuning sessions when you are experimenting with something and want a clean baseline.
+
+## What About A Connection Pooler?
+
+If you are building something like Catfish, you don’t necessarily want to expose every single Postgres statistic yourself.
+
+A much more useful pattern is to expose a `/metrics` endpoint with the metrics that belong to the pooler itself.
+
+Things like active connections, queue depth, and backpressure state can be exposed in Prometheus format. Then they can be monitored alongside the actual Postgres metrics.
+
+This gives you another useful distinction. If users are experiencing slow queries, you can start asking whether Postgres is actually slow or whether the pooler is under pressure and is the thing holding requests up.
+
+## So How Do You Know If A Number Is High Or Low?
+
+This is probably one of the most important questions in monitoring.
+
+And unfortunately, there is no universal threshold for most Postgres metrics.
+
+Take a counter of `500,000 fsyncs`. Is that bad?
+
+It depends.
+
+If those 500,000 fsyncs happened in five minutes, that could be alarming. If they happened over three months, it could be completely normal.
+
+The first thing you should look at is the **rate over time**, not the raw count. You should always consider how much time has passed since `stats_reset`.
+
+The second thing is your own baseline. Every workload is different, and your hardware, query patterns, traffic, and data size all affect what “normal” looks like. A deviation from your own normal behaviour is often more useful than some generic number someone gave you on the internet.
+
+The third thing is ratios. For example, the cache hit ratio can be calculated as:
+
+```
+hits / (hits + reads)
+```
+
+Around 99% or higher is a common rule of thumb for OLTP workloads, although analytics workloads that scan large tables can naturally have lower hit ratios.
+
+And finally, always correlate a metric with an actual symptom. A high number by itself isn’t automatically a problem. If disk reads are high but queries are fast, users aren’t complaining, and OS-level disk latency is healthy, then the number may simply be normal for your workload.
+
+## Part Two — Connections, Activity & Wait Events
+
+Now we get into the part of Postgres monitoring that is probably the most useful when something is actively going wrong.
+
+What is every connection doing right now?
+
+And if one of them is stuck, **why** is it stuck?
+
+This is where `pg_stat_activity` becomes one of the most important views you should know.
+
+## pg\_stat\_activity
+
+`pg_stat_activity` gives you one row per backend process, which you can roughly think of as one row per connection or worker doing something.
+
+It tells you who is connected, what they are doing, what state they’re in, and whether they are currently waiting for something.
+
+The simplest version is:
+
+```
+SELECT pid, usename, state, query, query_start
+FROM pg_stat_activity;
+```
+
+That is already useful, but when debugging a real issue, we usually want more information.
+
+For example, to find long-running or stuck queries:
+
+```
+SELECT pid, usename, state, wait_event_type, wait_event,
+       now() - query_start AS running_for, query
+FROM pg_stat_activity
+WHERE state != 'idle'
+ORDER BY running_for DESC;
+```
+
+This gives you the running duration and the wait information, which is often where the real clue is.
+
+## Finding Idle-in-Transaction Connections
+
+There is another query that is especially useful when working with a connection pooler:
+
+```
+SELECT pid, usename, state,
+       now() - xact_start AS idle_txn_duration,
+       query
+FROM pg_stat_activity
+WHERE state = 'idle in transaction'
+ORDER BY idle_txn_duration DESC;
+```
+
+So what exactly is the difference between `idle` and `idle in transaction`?
+
+## `idle` vs `idle in transaction`
+
+An `idle` connection is usually completely normal. The connection is open, the application isn't currently doing anything, and there is no transaction open. It is simply sitting there waiting for the next command.
+
+`idle in transaction` is very different.
+
+It means the application started a transaction, ran one or more commands, and then hasn’t committed or rolled back yet. Postgres is essentially waiting for the application to finish the transaction.
+
+And this matters much more than a normal idle connection because that open transaction can continue holding resources.
+
+While a connection sits idle inside a transaction, it can hold active table locks and prevent autovacuum from cleaning up old row versions. If this continues for long enough, it can slow down the whole database.
+
+There is also another way to end up in this state. A transaction can start, one of its queries can fail, and the application can fail to roll the transaction back. Postgres then stops accepting normal queries in that session until the transaction is aborted, while the session can still hold its locks and other resources.
+
+So a simple application error can turn into a database-wide problem if the application doesn’t clean up its transaction properly.
+
+## Will Postgres Disconnect Idle Connections Automatically?
+
+Not necessarily.
+
+A completely idle connection can remain open indefinitely unless something else, such as a proxy, load balancer, firewall, or client-side TCP keepalive configuration, closes it.
+
+For connections that are specifically stuck in a transaction, Postgres provides:
+
+`idle_in_transaction_session_timeout`
+
+which automatically terminates sessions that stay idle in a transaction for longer than the configured duration.
+
+There is also:
+
+`idle_session_timeout`
+
+which terminates idle sessions generally, whether they are inside or outside a transaction.
+
+## Wait Events — The Most Useful Part Of pg\_stat\_activity
+
+Now suppose a backend is active, but it isn’t actually making progress.
+
+The `state` tells you the broad picture, but `wait_event_type` and `wait_event` can tell you what the backend is waiting for.
+
+You can find currently waiting sessions with:
+
+```
+SELECT pid, wait_event_type, wait_event, state, query
+FROM pg_stat_activity
+WHERE wait_event IS NOT NULL;
+```
+
+The important thing here isn’t memorizing every individual wait event. It is understanding the categories.
+
+`Activity` usually means an internal background process is waiting in its own loop for work. That's generally normal.
+
+`BufferPin` means a process is waiting for exclusive access to a data page that another process is holding, such as through a cursor.
+
+`Client` means Postgres is waiting on the application itself. If you see lots of `ClientRead` while sessions are marked active, the application may be the slow part rather than Postgres.
+
+`Extension` means the wait is happening inside a third-party extension.
+
+`IO` means the process is waiting for actual disk I/O, which can point toward slow storage.
+
+`IPC` means it is waiting for another Postgres process, such as a parallel worker or checkpoint coordination.
+
+`Lock` means a heavyweight lock is involved — table locks, row locks, advisory locks, and similar things. This is one of the first things to investigate when you suspect blocking.
+
+`LWLock` means Postgres is waiting for an internal lightweight lock protecting shared memory, which is generally internal contention rather than application-level blocking.
+
+And `Timeout` means the backend is waiting on a timer, such as with `pg_sleep()` or deliberate vacuum throttling.
+
+You don’t need to memorize every specific wait event.
+
+The workflow is much simpler: check `pg_stat_activity`, find the active session, see what `wait_event` says, and then investigate that specific wait. If the wait is `Lock`, the natural next step is joining against `pg_locks` to find who is holding the lock.
+
+So the mental model is basically:
+
+**activity stats tell you about the connection → state tells you whether it is active or idle → wait event tells you why an active connection is stuck.**
+
+## Part Three — WAL, Checkpoints & Archiving
+
+Now we get into the durability engine underneath Postgres.
+
+This is where WAL, checkpoints, disk I/O and backups all connect together. Understanding this part is especially useful because things like slow commits, growing WAL files, and long recovery times can often be traced back to the same chain of events.
+
+## What Is A WAL Segment?
+
+WAL stands for **Write-Ahead Log**, and it is basically Postgres’s transaction log.
+
+The fundamental idea is that before a change is applied to the actual table data, the change is first written to WAL. That way, if the server crashes halfway through a write, Postgres can replay the WAL during recovery and reconstruct the changes that had already been committed.
+
+The WAL isn’t stored as one giant file. It is divided into segments, and by default each segment is 16 MB. The segment size is set during cluster initialization using `--wal-segsize`, and it cannot be changed after the cluster has been created.
+
+As transactions generate WAL, Postgres writes into the current segment. Once that segment fills up, it moves to another one. You can think of it as a rotating log file.
+
+## What Exactly Is A Checkpoint?
+
+A checkpoint is basically a guarantee point.
+
+It means that all the WAL up to that point has now been reflected in the actual data files on disk. Postgres takes dirty pages — modified pages that were sitting in `shared_buffers` — and flushes them to the actual table and index files.
+
+Why does this matter?
+
+Because during crash recovery, Postgres only needs to replay WAL generated **after the last checkpoint**. Everything before that checkpoint has already been written into the real data files.
+
+This is also connected to WAL segment recycling. Once a checkpoint completes, WAL segments older than the checkpoint are no longer needed for crash recovery and can potentially be recycled.
+
+But there are exceptions. If archiving hasn’t successfully backed up a segment, Postgres can’t recycle it when archiving is enabled. A standby or replication slot can also keep an older WAL segment around because it still needs that history.
+
+## The Checkpoint Tradeoff
+
+Checkpoint tuning is basically a tradeoff.
+
+If checkpoints happen too often, Postgres constantly has to produce bursts of disk writes, which can hurt performance.
+
+But if checkpoints happen too rarely, crash recovery takes longer and more WAL can accumulate on disk while waiting to become recyclable.
+
+This is why settings such as `checkpoint_timeout` and `max_wal_size` matter so much. They influence how frequently checkpoints happen and how much WAL can accumulate before Postgres needs to force another checkpoint.
+
+## write() Is Not The Same As fsync()
+
+There is another distinction that becomes important when looking at disk performance.
+
+The rough path looks like this:
+
+```
+write()
+    ↓
+data leaves Postgres
+    ↓
+OS RAM / buffer cache
+    ↓
+fsync()
+    ↓
+physically durable on disk
+```
+
+When Postgres writes dirty pages, those pages first move from Postgres’s own memory into the operating system’s buffer cache. That handoff is relatively fast, but it doesn’t necessarily mean the data is physically durable against a power failure.
+
+`fsync()` is what forces the storage system to actually persist the data and confirm it.
+
+That confirmation is what allows Postgres to consider the commit safely durable.
+
+## pg\_stat\_checkpointer
+
+`pg_stat_checkpointer` tracks checkpoint activity across the cluster, and it has one row.
+
+The first counters worth knowing are `num_timed`, which counts checkpoints triggered because `checkpoint_timeout` was reached, and `num_requested`, which counts checkpoints triggered manually or because too much WAL was generated and `max_wal_size` was reached.
+
+`num_done` tells you how many checkpoints actually completed.
+
+On standby servers, you also get the corresponding restartpoint counters: `restartpoints_timed`, `restartpoints_req`, and `restartpoints_done`.
+
+There are also performance metrics.
+
+`write_time` is the time spent copying dirty pages to the OS, while `sync_time` is the time spent doing `fsync()` and forcing physical durability. `buffers_written` tells you how many memory blocks were written during checkpoints.
+
+A healthy system should generally have `num_timed` dominating over `num_requested`. If `num_requested` keeps increasing, checkpoints are being forced earlier than expected because the workload is generating WAL quickly enough to hit `max_wal_size`.
+
+In that situation, increasing `max_wal_size` or adjusting `checkpoint_timeout` may be worth investigating.
+
+Also pay attention to `sync_time`. If syncing takes a large portion of total checkpoint time, your storage latency is showing up directly in Postgres. It is also useful to compare this against `buffers_backend` from the background writer statistics because if the checkpoint and background writer aren't keeping up, the query-serving backends can end up doing the writes themselves and stall queries.
+
+## pg\_stat\_wal
+
+If `pg_stat_checkpointer` tells you about checkpoints, `pg_stat_wal` tells you about WAL generation itself.
+
+`wal_records` is the total number of WAL records generated, while `wal_fpi` counts full-page images written to WAL. A full-page image is a complete copy of a page rather than just the individual change, and it is used on the first modification to a page after each checkpoint to protect against torn pages during a crash.
+
+Then there is `wal_bytes`, which is probably the most straightforward metric: the total WAL volume generated.
+
+`wal_buffers_full` tells you how many times a backend had to flush WAL early because the in-memory `wal_buffers` was full. And `wal_write` and `wal_sync` count WAL write and fsync calls.
+
+## What Does Healthy WAL Look Like?
+
+`wal_buffers_full` should generally be low or zero. If it keeps climbing, your WAL generation rate may be too high for the current `wal_buffers` size, forcing backends to flush WAL early instead of batching it efficiently. Increasing `wal_buffers` can help in that situation.
+
+A persistently high full-page-image ratio can also be a clue that checkpoints are happening too frequently. Remember that after each checkpoint, the first modification to a page can require another full-page image, so checkpoint frequency directly affects WAL volume.
+
+And if `wal_write_time` or `wal_sync_time` is increasing, your WAL storage may be becoming a bottleneck. WAL is directly involved in commit durability, so slow WAL syncing can directly increase transaction commit latency.
+
+This gives us a useful chain to remember:
+
+**checkpoint frequency → WAL full-page-image volume → WAL disk I/O → commit latency**
+
+So if commits suddenly feel slow, don’t just look at the queries themselves. Check `pg_stat_wal` for sync time and FPI behaviour, then check `pg_stat_checkpointer` to see whether checkpoints are happening too frequently, and finally look at `pg_stat_bgwriter` and `pg_stat_io` to understand whether your buffers and storage are keeping up.
+
+## Why Archive WAL At All?
+
+There are two major reasons to archive WAL.
+
+The first is **Point-in-Time Recovery**, or PITR. If your last base backup was taken at midnight and something went wrong at 3 PM, you don’t want to lose everything between midnight and 3 PM. With archived WAL, you can restore the base backup and replay WAL until just before the disaster.
+
+The second reason is standby bootstrapping. If a standby falls too far behind for streaming replication to catch up, it can fetch older WAL segments from the archive.
+
+Without WAL archiving, once a WAL segment is recycled, that history is gone. You can restore to your last full backup, but you can’t restore to some arbitrary point between that backup and the disaster.
+
+## Should WAL Archiving Be Enabled?
+
+By default, `archive_mode` is off.
+
+For a production database that actually matters, you generally want WAL archiving enabled using `archive_mode = on` or, where appropriate, `always`, together with a working `archive_command`.
+
+And yes, object storage such as S3 is a very common place to put those archived WAL segments. `archive_command` is simply the shell command Postgres executes for each segment. You could technically make that command upload directly to S3, but in practice, a proper backup tool is usually the better option.
+
+## Do I Need A Backup Tool?
+
+I would strongly recommend using a real backup tool such as **pgBackRest** or **WAL-G** instead of trying to build the entire process yourself with a custom `archive_command`.
+
+Restoring a Postgres database is genuinely complicated. You need the correct base backup, the correct chain of WAL segments, and the correct recovery target. Trying to piece all of that together manually in the middle of an outage is not something you want to discover you’re bad at.
+
+Tools like pgBackRest and WAL-G handle things such as compression, parallel upload and download, retention policies, backup verification, and management of the base backups and `archive_command` / `restore_command`.
+
+## When Does A WAL Segment Actually Get Recycled?
+
+Roughly speaking, a WAL segment can be recycled once all of the things that might still need it are done.
+
+It needs to be old enough that crash recovery no longer requires it because the relevant checkpoint has completed. If archiving is enabled, it also needs to have been successfully archived. And it can’t still be required by `wal_keep_size` or an active replication slot.
+
+This leads us to one of the classic Postgres incidents.
+
+## Classic Incident — WAL Fills The Disk
+
+Imagine you have WAL archiving enabled, but the archive command is broken.
+
+Maybe the destination is unreachable.
+
+Maybe permissions changed.
+
+Maybe the archive storage is full.
+
+Whatever the reason, Postgres cannot confirm that the WAL segments were successfully archived. That means those segments cannot safely be recycled, so they start piling up on disk.
+
+Eventually, the database disk can fill completely.
+
+This is a surprisingly common root cause of “why did my Postgres disk suddenly fill up?” incidents.
+
+## pg\_stat\_archiver
+
+If `archive_mode` is enabled, `pg_stat_archiver` gives you the monitoring information for WAL archiving.
+
+`archived_count`, `last_archived_wal`, and `last_archived_time` tell you about successful archiving.
+
+Then you have `failed_count`, `last_failed_wal`, and `last_failed_time` for failures.
+
+If `failed_count` keeps climbing, your archive command is broken. The exact cause could be something like a full disk, incorrect permissions, or an unreachable storage target.
+
+## Breathe In…
+
+That might have been a long post already, so I will wrap it up here for the first part. We will cover the statistics numbers that explain the larger context (database level, table level, etc,. ) in the next part.
+Until then, さようなら.

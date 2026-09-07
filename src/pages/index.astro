@@ -21,15 +21,17 @@ const searchIndex = posts.map((p) => ({
 <BaseLayout title="divyansh.dev · Blog">
   <section class="hero">
     <div class="ps-glow"></div>
-    <h1>Writing on backend, systems &amp; first principles</h1>
-    <p class="hero-sub">Notes and deep dives, built one concept at a time.</p>
+    <div class="hero-inner">
+      <h1>Writing on backend, systems &amp; first principles</h1>
+      <p class="hero-sub">Notes and deep dives, built one concept at a time.</p>
 
-    <div class="search-wrap">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="11" cy="11" r="8"></circle>
-        <path d="m21 21-4.35-4.35"></path>
-      </svg>
-      <input id="search-input" type="text" placeholder="Search posts or tags…" autocomplete="off" />
+      <div class="search-wrap">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <path d="m21 21-4.35-4.35"></path>
+        </svg>
+        <input id="search-input" type="text" placeholder="Search posts or tags…" autocomplete="off" />
+      </div>
     </div>
   </section>
 
@@ -59,9 +61,17 @@ const searchIndex = posts.map((p) => ({
   <style>
     .hero {
       position: relative;
+      width: 100vw;
+      margin-left: calc(50% - 50vw);
+      margin-right: calc(50% - 50vw);
       padding: 3rem 0 2rem;
       overflow: hidden;
       isolation: isolate;
+    }
+    .hero-inner {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 0 1.25rem;
     }
     .hero h1 { font-size: 2.1rem; line-height: 1.25; margin: 0 0 0.6rem; max-width: 20ch; }
     .hero-sub { color: var(--text-dim); margin: 0 0 1.75rem; }
