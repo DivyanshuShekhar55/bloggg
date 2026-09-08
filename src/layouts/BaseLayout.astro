@@ -28,10 +28,11 @@ const { title, description = "A personal blog on backend, systems, and first pri
   <body>
     <header class="site-header">
       <div class="header-inner">
-        <a href="/" class="brand">divyansh<span>.dev</span></a>
+        <a href="/" class="brand">divyansh.dev</a>
         <nav class="nav">
           <a href="/">Blog</a>
           <a href="/tags">Tags</a>
+          <a href="https://divyanshu-shekharx-skywalker.vercel.app/" target="_blank" rel="noopener">Follow me</a>
           <ThemeToggle />
         </nav>
       </div>
@@ -41,14 +42,20 @@ const { title, description = "A personal blog on backend, systems, and first pri
       <slot />
     </main>
 
+    <footer class="site-footer">
+      <div class="container">
+        <p>&copy; {new Date().getFullYear()} Divyansh</p>
+      </div>
+    </footer>
 
     <style>
       .site-header {
-        border-bottom: 1px solid var(--border);
+        border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
         position: sticky;
         top: 0;
-        background: color-mix(in srgb, var(--bg) 85%, transparent);
-        backdrop-filter: blur(10px);
+        background: color-mix(in srgb, var(--bg) 62%, transparent);
+        backdrop-filter: blur(14px) saturate(1.1);
+        -webkit-backdrop-filter: blur(14px) saturate(1.1);
         z-index: 50;
       }
       .header-inner {
@@ -58,10 +65,23 @@ const { title, description = "A personal blog on backend, systems, and first pri
         max-width: 1200px;
         margin: 0 auto;
         padding: 0.9rem 1.5rem;
+        font-family: "Quicksand", system-ui, sans-serif;
       }
-      .brand { font-weight: 700; font-size: 1.05rem; }
-      .brand span { color: var(--pink); }
-      .nav { display: flex; align-items: center; gap: 1.25rem; font-size: 0.92rem; }
+      .brand {
+        font-weight: 500;
+        font-size: 1.02rem;
+        color: var(--text);
+      }
+      .brand:hover { color: var(--text); }
+      .nav {
+        display: flex;
+        align-items: center;
+        gap: 1.4rem;
+        font-size: 0.92rem;
+        font-weight: 500;
+      }
+      .nav a { color: var(--text-dim); }
+      .nav a:hover { color: var(--text); }
       .site-footer {
         border-top: 1px solid var(--border);
         margin-top: 4rem;
