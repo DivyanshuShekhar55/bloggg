@@ -41,11 +41,6 @@ const { title, description = "A personal blog on backend, systems, and first pri
       <slot />
     </main>
 
-    <footer class="site-footer">
-      <div class="container">
-        <p>&copy; {new Date().getFullYear()} Divyansh. Built with Astro.</p>
-      </div>
-    </footer>
 
     <style>
       .site-header {
@@ -65,7 +60,7 @@ const { title, description = "A personal blog on backend, systems, and first pri
         padding: 0.9rem 1.5rem;
       }
       .brand { font-weight: 700; font-size: 1.05rem; }
-      .brand span { color: var(--accent); }
+      .brand span { color: var(--pink); }
       .nav { display: flex; align-items: center; gap: 1.25rem; font-size: 0.92rem; }
       .site-footer {
         border-top: 1px solid var(--border);
