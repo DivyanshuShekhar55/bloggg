@@ -22,8 +22,8 @@ const searchIndex = posts.map((p) => ({
   <section class="hero">
     <div class="ps-glow"></div>
     <div class="hero-inner">
-      <h1>Writing on backend, systems &amp; first principles</h1>
-      <p class="hero-sub">Notes and deep dives, built one concept at a time.</p>
+      <h1>Writing on systems, databases &amp; first principles</h1>
+      <p class="hero-sub">notes and deep dives on techical details i love</p>
 
       <div class="search-wrap">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -34,8 +34,6 @@ const searchIndex = posts.map((p) => ({
       </div>
     </div>
   </section>
-
-  
 
   <ul id="post-list" class="post-list">
       {posts.map((post) => (
@@ -82,19 +80,20 @@ const searchIndex = posts.map((p) => ({
       display: flex;
       align-items: center;
       gap: 0.7rem;
-      border: 1px solid var(--border);
-      background: var(--bg-soft);
-      border-radius: 999px;
-      padding: 0.7rem 1.1rem;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      background: transparent;
+      border-radius: 0;
+      padding: 0.6rem 0.1rem;
       max-width: 440px;
       color: var(--text-dim);
-      box-shadow: var(--shadow);
-      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      box-shadow: none;
+      transition: border-color 0.2s ease;
     }
-    .search-wrap svg { flex-shrink: 0; opacity: 0.7; }
+    .search-wrap svg { flex-shrink: 0; opacity: 0.6; }
     .search-wrap:focus-within {
       border-color: var(--accent);
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+      box-shadow: none;
     }
     .search-wrap input {
       border: none;
