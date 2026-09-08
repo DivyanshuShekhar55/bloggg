@@ -5,13 +5,14 @@ import sitemap from '@astrojs/sitemap';
 
 // TODO: replace with your real domain before deploying to Cloudflare Pages
 export default defineConfig({
-  site: 'http://localhost:4321/',
+  site: 'https://your-blog.pages.dev',
+  output: 'static',
   integrations: [mdx(), sitemap()],
   markdown: {
     shikiConfig: {
       themes: {
         light: 'github-light',
-        dark: 'dark-plus',
+        dark: 'github-dark',
       },
       wrap: true,
     },
