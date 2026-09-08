@@ -33,9 +33,21 @@ const { title, description = "A personal blog on backend, systems, and first pri
           <a href="/">Blog</a>
           <a href="/tags">Tags</a>
           <a href="https://divyanshu-shekharx-skywalker.vercel.app/" target="_blank" rel="noopener">Follow me</a>
-          <ThemeToggle />
         </nav>
+        <div class="header-right">
+          <ThemeToggle />
+          <button id="menu-toggle" class="menu-toggle" aria-label="Toggle menu" aria-expanded="false" type="button">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M4 7h16M4 12h16M4 17h16"></path>
+            </svg>
+          </button>
+        </div>
       </div>
+      <nav id="mobile-nav" class="mobile-nav">
+        <a href="/">Blog</a>
+        <a href="/tags">Tags</a>
+        <a href="https://divyanshu-shekharx-skywalker.vercel.app/" target="_blank" rel="noopener">Follow me</a>
+      </nav>
     </header>
 
     <main class="container">
@@ -44,7 +56,7 @@ const { title, description = "A personal blog on backend, systems, and first pri
 
     <footer class="site-footer">
       <div class="container">
-        <p>&copy; {new Date().getFullYear()} Divyansh</p>
+        <p>&copy; {new Date().getFullYear()} Divyansh. Built with Astro.</p>
       </div>
     </footer>
 
@@ -82,6 +94,45 @@ const { title, description = "A personal blog on backend, systems, and first pri
       }
       .nav a { color: var(--text-dim); }
       .nav a:hover { color: var(--text); }
+
+      .header-right { display: flex; align-items: center; gap: 0.6rem; }
+
+      .menu-toggle {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--bg-soft);
+        color: var(--text);
+        cursor: pointer;
+      }
+
+      .mobile-nav {
+        display: none;
+        flex-direction: column;
+        gap: 0;
+        border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+        font-family: "Quicksand", system-ui, sans-serif;
+        font-weight: 500;
+        font-size: 0.95rem;
+      }
+      .mobile-nav a {
+        padding: 0.85rem 1.5rem;
+        color: var(--text-dim);
+        border-bottom: 1px solid color-mix(in srgb, var(--border) 35%, transparent);
+      }
+      .mobile-nav a:hover { color: var(--text); }
+      .mobile-nav.open { display: flex; }
+
+      /* Below this width: hide the inline nav, show hamburger + dropdown instead */
+      @media (max-width: 640px) {
+        .nav { display: none; }
+        .menu-toggle { display: flex; }
+      }
+
       .site-footer {
         border-top: 1px solid var(--border);
         margin-top: 4rem;
@@ -91,5 +142,14 @@ const { title, description = "A personal blog on backend, systems, and first pri
       }
       main { padding: 2.5rem 1.25rem 4rem; min-height: 60vh; }
     </style>
+
+    <script>
+      const toggle = document.getElementById('menu-toggle');
+      const mobileNav = document.getElementById('mobile-nav');
+      toggle?.addEventListener('click', () => {
+        const isOpen = mobileNav?.classList.toggle('open');
+        toggle.setAttribute('aria-expanded', String(!!isOpen));
+      });
+    </script>
   </body>
 </html>
